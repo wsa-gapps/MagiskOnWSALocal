@@ -17,35 +17,37 @@
 #
 
 $Host.UI.RawUI.WindowTitle = "Merging resources...."
-If (((Test-Path -Path $(Get-Content -Path .\filelist-pri.txt)) -Eq $false).Count) {
-    Write-Error "Some files are missing in the folder. Please try to build again. Press any key to exit"
-    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-    exit 1
-} Else {
-    New-Item -Path "." -Name "priinfo" -ItemType "directory" | Out-Null
-    Copy-Item .\resources.pri -Destination ".\pri\resources.pri" | Out-Null
-    Clear-Host
+If ((Test-Path -Path "pri") -Eq $true -And (Test-Path -Path "xml") -Eq $true) {
     $AppxManifestFile = ".\AppxManifest.xml"
-    $PriItem = Get-Item ".\pri\*" -Include "*.pri"
-    Write-Output "Dumping resources...."
-    $i = 0
-    $Processes = ForEach ($Item in $PriItem) {
-        Start-Process -PassThru -WindowStyle Hidden makepri.exe -Args "dump /if $($Item | Resolve-Path -Relative) /o /es .\pri\resources.pri /of .\priinfo\$($Item.Name).xml /dt detailed"
-        ++$i
-        $Completed = ($i / $PriItem.count) * 100
-        Write-Progress -Activity "Dumping resources" -Status "Dumping $($Item.Name):" -PercentComplete $Completed
-    }
-    $Processes | Wait-Process
-    Write-Progress -Activity "Dumping resources" -Status "Ready" -Completed
-    Clear-Host
-    Write-Output "Creating pri from dumps...."
-    $ProcNewFromDump = Start-Process -PassThru -NoNewWindow makepri.exe -Args "new /pr .\priinfo /cf .\xml\priconfig.xml /of .\resources.pri /mn $AppxManifestFile /o"
-    $null = $ProcNewFromDump.Handle
-    $ProcNewFromDump.WaitForExit()
-    Remove-Item 'priinfo' -Recurse
-    If ($ProcNewFromDump.ExitCode -Ne 0) {
-        Write-Error "Failed to create resources from priinfos"
-        exit 1
+    Copy-Item .\resources.pri -Destination ".\pri\resources.pri" | Out-Null
+    $ProcNew = Start-Process -PassThru makepri.exe -NoNewWindow -Args "new /pr .\pri /cf .\xml\priconfig.xml /of .\resources.pri /mn $AppxManifestFile /o"
+    $null = $ProcNew.Handle
+    $ProcNew.WaitForExit()
+    If ($ProcNew.ExitCode -Ne 0) {
+        Write-Warning "Failed to merge resources from pris`r`nTrying to dump pris to priinfo...."
+        New-Item -Path "." -Name "priinfo" -ItemType "directory"
+        Clear-Host
+        $i = 0
+        $PriItem = Get-Item ".\pri\*" -Include "*.pri"
+        Write-Output "Dumping resources...."
+        $Processes = ForEach ($Item in $PriItem) {
+            Start-Process -PassThru -WindowStyle Hidden makepri.exe -Args "dump /if $($Item | Resolve-Path -Relative) /o /es .\pri\resources.pri /of .\priinfo\$($Item.Name).xml /dt detailed"
+            $i = $i + 1
+            $Completed = ($i / $PriItem.count) * 100
+            Write-Progress -Activity "Dumping resources" -Status "Dumping $($Item.Name):" -PercentComplete $Completed
+        }
+        $Processes | Wait-Process
+        Write-Progress -Activity "Dumping resources" -Status "Ready" -Completed
+        Clear-Host
+        Write-Output "Creating pri from dumps...."
+        $ProcNewFromDump = Start-Process -PassThru -NoNewWindow makepri.exe -Args "new /pr .\priinfo /cf .\xml\priconfig.xml /of .\resources.pri /mn $AppxManifestFile /o"
+        $null = $ProcNewFromDump.Handle
+        $ProcNewFromDump.WaitForExit()
+        Remove-Item 'priinfo' -Recurse
+        If ($ProcNewFromDump.ExitCode -Ne 0) {
+            Write-Error "Failed to create resources from priinfos"
+            exit 1
+        }
     }
 
     $ProjectXml = [xml](Get-Content $AppxManifestFile)
@@ -57,9 +59,12 @@ If (((Test-Path -Path $(Get-Content -Path .\filelist-pri.txt)) -Eq $false).Count
     }
     $ProjectXml.Save($AppxManifestFile)
     Remove-Item 'pri' -Recurse
+    Set-Content -Path "filelist.txt" -Value (Get-Content -Path "filelist.txt" | Select-String -Pattern '^pri$' -NotMatch)
     Remove-Item 'xml' -Recurse
+    Set-Content -Path "filelist.txt" -Value (Get-Content -Path "filelist.txt" | Select-String -Pattern '^xml$' -NotMatch)
     Remove-Item 'makepri.exe'
-    Remove-Item 'filelist-pri.txt'
+    Set-Content -Path "filelist.txt" -Value (Get-Content -Path "filelist.txt" | Select-String -Pattern 'makepri.exe' -NotMatch)
     Remove-Item $PSCommandPath -Force
+    Set-Content -Path "filelist.txt" -Value (Get-Content -Path "filelist.txt" | Select-String -Pattern 'MakePri.ps1' -NotMatch)
     exit 0
 }
