@@ -28,7 +28,7 @@
 
 ```shell
 cd ~/
-sudo git clone https://github.com/WSABuilds/MagiskOnWSALocal.git
+sudo git clone https://github.com/wsa-gapps/MagiskOnWSALocal.git
 cd MagiskOnWSALocal
 cd scripts
 sudo ./run.sh
